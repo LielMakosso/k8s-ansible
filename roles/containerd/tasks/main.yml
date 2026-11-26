@@ -1,0 +1,30 @@
+---
+- name: Installer containerd
+  ansible.builtin.apt:
+    name: containerd
+    state: present
+    update_cache: true
+
+- name: Créer le dossier de configuration
+  ansible.builtin.file:
+    path: /etc/containerd
+    state: directory
+    mode: "0755"
+
+- name: Récupérer la configuration par défaut de containerd
+  ansible.builtin.command: containerd config default
+  register: containerd_default_cfg
+  changed_when: false
+
+- name: Écrire config.toml avec SystemdCgroup = true
+  ansible.builtin.copy:
+    dest: /etc/containerd/config.toml
+    content: "{{ containerd_default_cfg.stdout | regex_replace('SystemdCgroup = false', 'SystemdCgroup = true') }}\n"
+    mode: "0644"
+  notify: Redémarrer containerd
+
+- name: Activer et démarrer containerd
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: true
+    state: started

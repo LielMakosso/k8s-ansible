@@ -61,3 +61,4 @@
   ansible.builtin.reboot:
     reboot_timeout: 600
   when: ansible_facts.swaptotal_mb > 0
+

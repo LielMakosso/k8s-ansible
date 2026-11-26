@@ -1,6 +1,7 @@
 ---
-- name: Préparation commune des nœuds Kubernetes
+- name: Préparation des nœuds Kubernetes
   hosts: k8s
   become: true
   roles:
     - common
+    - containerd
