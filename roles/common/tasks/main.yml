@@ -1,0 +1,63 @@
+---
+- name: Définir le hostname selon l'inventaire
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  when: ansible_facts.hostname != inventory_hostname
+
+- name: Renseigner /etc/hosts avec tous les nœuds
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} ANSIBLE K8S NODES"
+    block: |
+      {% for n in k8s_nodes %}
+      {{ n.ip }} {{ n.name }}
+      {% endfor %}
+
+- name: Installer les paquets de base
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    state: present
+    update_cache: true
+
+- name: Désactiver le swap de façon permanente (fstab)
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'
+
+- name: Charger les modules noyau au démarrage
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: "0644"
+
+- name: Charger les modules noyau maintenant
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+
+- name: Paramètres sysctl pour Kubernetes
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-k8s.conf
+    reload: true
+    state: present
+  loop:
+    - { key: net.bridge.bridge-nf-call-iptables,  value: "1" }
+    - { key: net.bridge.bridge-nf-call-ip6tables, value: "1" }
+    - { key: net.ipv4.ip_forward,                 value: "1" }
+
+- name: Redémarrer si le swap est encore actif
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  when: ansible_facts.swaptotal_mb > 0
