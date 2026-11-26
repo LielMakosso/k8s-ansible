@@ -6,3 +6,9 @@
     - common
     - containerd
     - kubeadm
+
+- name: Initialisation du control plane et réseau Calico
+  hosts: masters
+  become: true
+  roles:
+    - master

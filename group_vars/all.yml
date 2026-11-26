@@ -4,4 +4,8 @@ k8s_nodes:
   - { name: k8s-worker1, ip: 192.168.1.16 }
   - { name: k8s-worker2, ip: 192.168.1.17 }
 
+control_plane_ip: "192.168.1.93"
+pod_network_cidr: "10.244.0.0/16"
+calico_version: "v3.32.2"
+
 k8s_minor_version: "1.36"

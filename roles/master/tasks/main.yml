@@ -1,0 +1,76 @@
+---
+- name: Initialiser le cluster avec kubeadm
+  ansible.builtin.command: >
+    kubeadm init
+    --apiserver-advertise-address={{ control_plane_ip }}
+    --pod-network-cidr={{ pod_network_cidr }}
+    --node-name={{ inventory_hostname }}
+  args:
+    creates: /etc/kubernetes/admin.conf
+
+- name: Créer le dossier .kube de l'utilisateur
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+
+- name: Copier admin.conf vers l'utilisateur
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+
+- name: Vérifier si l'opérateur Calico est déjà installé
+  ansible.builtin.command: kubectl get namespace tigera-operator
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: calico_ns
+  failed_when: false
+  changed_when: false
+
+- name: Installer les CRD Calico (projectcalico.org/v3)
+  ansible.builtin.command: >
+    kubectl create -f
+    https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/v3_projectcalico_org.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: calico_ns.rc != 0
+
+- name: Installer l'opérateur Tigera
+  ansible.builtin.command: >
+    kubectl create -f
+    https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/tigera-operator.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: calico_ns.rc != 0
+
+- name: Attendre que la CRD Installation soit disponible
+  ansible.builtin.command: >
+    kubectl wait --for=condition=Established
+    crd/installations.operator.tigera.io --timeout=180s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Télécharger custom-resources.yaml
+  ansible.builtin.get_url:
+    url: "https://raw.githubusercontent.com/projectcalico/calico/{{ calico_version }}/manifests/custom-resources.yaml"
+    dest: /opt/calico-custom-resources.yaml
+    mode: "0644"
+
+- name: Adapter le CIDR des pods
+  ansible.builtin.replace:
+    path: /opt/calico-custom-resources.yaml
+    regexp: 'cidr: 192\.168\.0\.0/16'
+    replace: 'cidr: {{ pod_network_cidr }}'
+
+- name: Appliquer la configuration Calico
+  ansible.builtin.command: kubectl create -f /opt/calico-custom-resources.yaml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: calico_ns.rc != 0
