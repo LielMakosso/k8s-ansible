@@ -3,3 +3,5 @@ k8s_nodes:
   - { name: k8s-master,  ip: 192.168.1.93 }
   - { name: k8s-worker1, ip: 192.168.1.16 }
   - { name: k8s-worker2, ip: 192.168.1.17 }
+
+k8s_minor_version: "1.36"
